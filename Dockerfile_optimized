@@ -1,0 +1,32 @@
+# Build stage
+FROM python:3.9-slim-buster AS build
+
+# Install build dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential openmpi-bin libopenmpi-dev && \
+    pip install --no-cache-dir mpi4py numpy
+
+# Final stage
+FROM python:3.9-slim-buster AS runtime
+
+# Install runtime dependencies only
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends openmpi-bin libopenmpi-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy Python packages from build stage
+COPY --from=build /usr/local/lib/python3.9/site-packages /usr/local/lib/python3.9/site-packages
+
+# Add non-root user
+RUN useradd -m mpiuser && \
+    mkdir -p /etc/sudoers.d && \
+    echo "mpiuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/mpiuser && \
+    chmod 0440 /etc/sudoers.d/mpiuser
+
+USER mpiuser
+WORKDIR /app
+
+# Copy Python program
+COPY --chown=mpiuser:mpiuser mpi_program.py .
+
+CMD ["mpirun", "-n", "2", "python3", "mpi_program.py"]
